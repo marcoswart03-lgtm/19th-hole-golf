@@ -1001,11 +1001,19 @@ function buildBag(){
   html+='<div class="sec-t" style="margin-bottom:13px;margin-top:24px">Data</div>';
   html+='<div class="card card-gold">';
   html+='<div style="font-size:.68rem;color:#5a8068;margin-bottom:14px;line-height:1.6">Export your data as a JSON file to back it up or move it to another device. Import a previously exported file to restore your data.</div>';
-  html+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
-  html+='<button class="btn btn-gold" onclick="exportData()">⬇ Export Data</button>';
+  html+='<div style="font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:#4a7055;margin-bottom:8px">Full backup</div>';
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">';
+  html+='<button class="btn btn-gold" onclick="exportData()">⬇ Export All Data</button>';
   html+='<button class="btn" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#ede8dc" onclick="document.getElementById(\'import-input\').click()">⬆ Import Data</button>';
   html+='</div>';
+  html+='<div style="font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:#4a7055;margin-bottom:8px">Share courses</div>';
+  html+='<div style="font-size:.68rem;color:#5a8068;margin-bottom:10px;line-height:1.6">Export only your course templates (no personal scores) so others can import them into their own tracker.</div>';
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
+  html+='<button class="btn" style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);color:#c9a84c" onclick="exportCourses()">⬇ Export Courses</button>';
+  html+='<button class="btn" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#ede8dc" onclick="document.getElementById(\'import-courses-input\').click()">⬆ Import Courses</button>';
+  html+='</div>';
   html+='<input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(this)">';
+  html+='<input type="file" id="import-courses-input" accept=".json" style="display:none" onchange="importCourses(this)">';
   html+='</div>';
   return html;
 }
@@ -1244,6 +1252,54 @@ function exportData(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function exportCourses(){
+  if(!S.courses.length){ alert('No courses to export yet.'); return; }
+  var data={type:'golf_courses_export',version:1,courses:S.courses};
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='golf_courses_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importCourses(input){
+  var file=input.files[0]; if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      // Accept both a courses-only export and a full data export
+      var incoming=data.courses||[];
+      if(!incoming.length){ alert('No courses found in this file.'); return; }
+      // Merge — skip courses with same name (case-insensitive) already in the app
+      var existingNames=S.courses.map(function(c){return c.name.toLowerCase().trim();});
+      var added=0, skipped=0;
+      incoming.forEach(function(c){
+        if(existingNames.indexOf(c.name.toLowerCase().trim())!==-1){ skipped++; return; }
+        // Give imported course a fresh id to avoid collisions
+        S.courses.push(Object.assign({},c,{id:uid()}));
+        added++;
+      });
+      apiSave(); render();
+      var msg=added+' course'+(added!==1?'s':'')+' imported';
+      if(skipped) msg+=' · '+skipped+' skipped (already exist)';
+      var note=document.createElement('div');
+      note.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#193326;border:1px solid rgba(201,168,76,0.4);color:#c9a84c;padding:12px 24px;border-radius:10px;font-size:.84rem;z-index:999;font-family:DM Sans,sans-serif;white-space:nowrap';
+      note.textContent=msg;
+      document.body.appendChild(note);
+      setTimeout(function(){document.body.removeChild(note);},3500);
+    } catch(err){
+      alert('Could not read file. Make sure it is a valid course export.');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
 }
 
 function importData(input){
