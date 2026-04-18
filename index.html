@@ -1765,13 +1765,16 @@ async function doLogin(){
   if(!email||!pw){ showAuthErr('Please enter your email and password.'); return; }
   var btn=document.querySelector('#auth-login .btn-gold');
   btn.textContent='Signing in...'; btn.disabled=true;
-  var res=await SUPA.auth.signInWithPassword({email:email,password:pw});
-  btn.textContent='Sign In'; btn.disabled=false;
-  if(res.error){ showAuthErr(res.error.message); return; }
-  await loadUserData();
-  checkLocalMigration();
-  showApp(res.data.user);
-  render();
+  clearAuthErr();
+  try {
+    var res=await SUPA.auth.signInWithPassword({email:email,password:pw});
+    if(res.error){ showAuthErr(res.error.message); btn.textContent='Sign In'; btn.disabled=false; return; }
+    // onAuthStateChange will fire SIGNED_IN and handle everything
+    // just leave the button as-is — the screen will switch automatically
+  } catch(e){
+    showAuthErr('Connection error. Check your internet and try again.');
+    btn.textContent='Sign In'; btn.disabled=false;
+  }
 }
 
 async function doSignup(){
@@ -1783,14 +1786,15 @@ async function doSignup(){
   if(pw.length<6){ showAuthErr('Password must be at least 6 characters.'); return; }
   var btn=document.querySelector('#auth-signup .btn-gold');
   btn.textContent='Creating account...'; btn.disabled=true;
-  var res=await SUPA.auth.signUp({email:email,password:pw});
-  btn.textContent='Create Account'; btn.disabled=false;
-  if(res.error){ showAuthErr(res.error.message); return; }
-  // Auto sign in after signup
-  await loadUserData();
-  checkLocalMigration();
-  showApp(res.data.user);
-  render();
+  clearAuthErr();
+  try {
+    var res=await SUPA.auth.signUp({email:email,password:pw});
+    if(res.error){ showAuthErr(res.error.message); btn.textContent='Create Account'; btn.disabled=false; return; }
+    // onAuthStateChange will fire SIGNED_IN and handle everything
+  } catch(e){
+    showAuthErr('Connection error. Check your internet and try again.');
+    btn.textContent='Create Account'; btn.disabled=false;
+  }
 }
 
 async function doSignout(){
@@ -1862,10 +1866,10 @@ async function migrateLocalData(btn){
       SUPA_USER=session.user;
     }
   });
-  // Fallback: if no auth event fires in 2s, show auth screen
+  // Fallback: if no auth event fires in 8s, show auth screen
   setTimeout(function(){
     if(initialLoad){ showAuth(); initialLoad=false; }
-  },2000);
+  },8000);
 })();
 </script>
 </body>
