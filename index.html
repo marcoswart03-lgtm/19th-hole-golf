@@ -350,7 +350,6 @@ async function apiSave(){
       localStorage.setItem('golf_19th_hole',JSON.stringify(payload));
       return;
     }
-    // Cache locally for instant load on refresh
     sessionStorage.setItem('golf_cache',JSON.stringify(payload));
     await SUPA.from('golf_data').upsert({user_id:SUPA_USER.id,data:payload,updated_at:new Date().toISOString()},{onConflict:'user_id'});
   } catch(e){ console.warn('Save failed:',e); }
@@ -1611,6 +1610,7 @@ function importData(input){
       S.courses=data.courses;
       S.rounds=data.rounds;
       S.bag=data.bag;
+      sessionStorage.setItem('golf_cache',JSON.stringify({courses:S.courses,rounds:S.rounds,bag:S.bag}));
       apiSave();
       render();
       // Show confirmation
@@ -1736,7 +1736,7 @@ var DEFAULT_BAG_DATA = [
 ];
 
 async function loadUserData(){
-  // Load from session cache first for instant display
+  // Show cached data instantly
   var cached=sessionStorage.getItem('golf_cache');
   if(cached){
     try{
@@ -1744,18 +1744,15 @@ async function loadUserData(){
       S.courses=c.courses||[];
       S.rounds=c.rounds||[];
       S.bag=c.bag&&c.bag.length?c.bag:DEFAULT_BAG_DATA;
-      render(); // show cached data immediately
     }catch(e){}
   }
-  // Then fetch fresh from Supabase and update
+  // Fetch fresh from Supabase
   var data=await apiLoad();
-  var hasData=data.courses||data.rounds;
-  if(hasData){
+  if(data.courses||data.rounds){
     S.courses=data.courses||[];
     S.rounds=data.rounds||[];
     S.bag=data.bag&&data.bag.length?data.bag:DEFAULT_BAG_DATA;
     sessionStorage.setItem('golf_cache',JSON.stringify({courses:S.courses,rounds:S.rounds,bag:S.bag}));
-    render();
   }
 }
 
@@ -1788,11 +1785,8 @@ async function doLogin(){
   try {
     var res=await SUPA.auth.signInWithPassword({email:email,password:pw});
     if(res.error){ showAuthErr(res.error.message); btn.textContent='Sign In'; btn.disabled=false; return; }
-    SUPA_USER=res.data.user;
-    await loadUserData();
-    checkLocalMigration();
-    showApp(res.data.user);
-    render();
+    // onAuthStateChange will fire SIGNED_IN and handle everything
+    // just leave the button as-is — the screen will switch automatically
   } catch(e){
     showAuthErr('Connection error. Check your internet and try again.');
     btn.textContent='Sign In'; btn.disabled=false;
@@ -1812,11 +1806,7 @@ async function doSignup(){
   try {
     var res=await SUPA.auth.signUp({email:email,password:pw});
     if(res.error){ showAuthErr(res.error.message); btn.textContent='Create Account'; btn.disabled=false; return; }
-    SUPA_USER=res.data.user;
-    await loadUserData();
-    checkLocalMigration();
-    showApp(res.data.user);
-    render();
+    // onAuthStateChange will fire SIGNED_IN and handle everything
   } catch(e){
     showAuthErr('Connection error. Check your internet and try again.');
     btn.textContent='Create Account'; btn.disabled=false;
@@ -1893,10 +1883,12 @@ async function migrateLocalData(btn){
       SUPA_USER=session.user;
     }
   });
-  // Fallback: if no auth event fires in 8s, show auth screen
-  setTimeout(function(){
-    if(initialLoad){ showAuth(); initialLoad=false; }
-  },8000);
+  // Show auth if session check returns no user
+  var sess=await SUPA.auth.getSession();
+  if(initialLoad&&(!sess.data||!sess.data.session)){
+    showAuth();
+    initialLoad=false;
+  }
 })();
 </script>
 </body>
