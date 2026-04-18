@@ -111,10 +111,57 @@ option{background:#0e1f14;color:#ede8dc;}
 ::-webkit-scrollbar-thumb{background:#1e3d25;border-radius:2px;}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
 input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.35) sepia(1) hue-rotate(80deg);}
+
+.auth-wrap{position:fixed;inset:0;background:#060e08;z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
+.auth-box{background:linear-gradient(140deg,#111f15,#090f0b);border:1px solid rgba(201,168,76,.22);border-radius:20px;padding:32px 28px;width:100%;max-width:400px;}
+.auth-title{font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:600;color:#ede8dc;text-align:center;margin-bottom:6px;}
+.auth-sub{font-size:.75rem;color:#4a7055;text-align:center;letter-spacing:.15em;text-transform:uppercase;margin-bottom:28px;}
+.auth-err{background:rgba(200,55,55,.12);border:1px solid rgba(200,55,55,.3);color:#e06060;border-radius:8px;padding:10px 14px;font-size:.82rem;margin-bottom:14px;display:none;}
+.auth-switch{text-align:center;margin-top:16px;font-size:.78rem;color:#4a7055;}
+.auth-switch a{color:#c9a84c;cursor:pointer;text-decoration:none;}
+.auth-switch a:hover{text-decoration:underline;}
+.auth-divider{text-align:center;color:#3a5642;font-size:.72rem;margin:14px 0;}
+.user-bar{display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,.2);border-bottom:1px solid rgba(255,255,255,.05);padding:8px 16px;position:sticky;top:0;z-index:10;}
+.user-email{font-size:.7rem;color:#5a8068;}
+.btn-signout{background:transparent;border:1px solid rgba(255,255,255,.08);color:#5a8068;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:.7rem;font-family:'DM Sans',sans-serif;}
+.btn-signout:hover{color:#e06060;border-color:rgba(224,96,96,.3);}
+.migr-banner{background:linear-gradient(135deg,rgba(28,48,33,.95),rgba(16,26,18,.98));border:1px solid rgba(201,168,76,.3);border-radius:14px;padding:20px;margin-bottom:16px;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-<div style="position:relative;min-height:100vh;">
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="auth-wrap">
+  <div class="auth-box">
+    <div class="auth-title">The 19th Hole</div>
+    <div class="auth-sub">Golf Tracker</div>
+    <div class="auth-err" id="auth-err"></div>
+    <!-- Login form -->
+    <div id="auth-login">
+      <div style="margin-bottom:12px"><label class="lbl">Email</label><input class="inp" id="login-email" type="email" placeholder="you@example.com"></div>
+      <div style="margin-bottom:18px"><label class="lbl">Password</label><input class="inp" id="login-pw" type="password" placeholder="••••••••"></div>
+      <button class="btn btn-gold" style="width:100%;justify-content:center;padding:12px" onclick="doLogin()">Sign In</button>
+      <div class="auth-switch">Don't have an account? <a onclick="showSignup()">Sign up</a></div>
+    </div>
+    <!-- Signup form -->
+    <div id="auth-signup" style="display:none">
+      <div style="margin-bottom:12px"><label class="lbl">Email</label><input class="inp" id="signup-email" type="email" placeholder="you@example.com"></div>
+      <div style="margin-bottom:12px"><label class="lbl">Password</label><input class="inp" id="signup-pw" type="password" placeholder="Min 6 characters"></div>
+      <div style="margin-bottom:18px"><label class="lbl">Confirm Password</label><input class="inp" id="signup-pw2" type="password" placeholder="Repeat password"></div>
+      <button class="btn btn-gold" style="width:100%;justify-content:center;padding:12px" onclick="doSignup()">Create Account</button>
+      <div class="auth-switch">Already have an account? <a onclick="showLogin()">Sign in</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- USER BAR (shown when logged in) -->
+<div id="user-bar" class="user-bar" style="display:none">
+  <div class="user-email" id="user-email-label"></div>
+  <button class="btn-signout" onclick="doSignout()">Sign out</button>
+</div>
+
+<div style="position:relative;min-height:100vh;" id="main-app" style="display:none">
   <div class="app-bg"></div>
   <div class="grain"></div>
   <div class="wrap">
@@ -286,12 +333,25 @@ var CF=null, RF=null;
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function apiLoad(){
-  try { var raw=localStorage.getItem('golf_19th_hole'); return raw?JSON.parse(raw):{}; }
-  catch(e){ return {}; }
+  try {
+    if(!SUPA_USER) {
+      var raw=localStorage.getItem('golf_19th_hole');
+      return raw?JSON.parse(raw):{};
+    }
+    var res=await SUPA.from('golf_data').select('data').eq('user_id',SUPA_USER.id).single();
+    if(res.error&&res.error.code==='PGRST116') return {}; // no row yet
+    return res.data?res.data.data:{};
+  } catch(e){ return {}; }
 }
 async function apiSave(){
-  try { localStorage.setItem('golf_19th_hole',JSON.stringify({courses:S.courses,rounds:S.rounds,bag:S.bag})); }
-  catch(e){ console.warn('Save failed:',e); }
+  var payload={courses:S.courses,rounds:S.rounds,bag:S.bag};
+  try {
+    if(!SUPA_USER){
+      localStorage.setItem('golf_19th_hole',JSON.stringify(payload));
+      return;
+    }
+    await SUPA.from('golf_data').upsert({user_id:SUPA_USER.id,data:payload,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  } catch(e){ console.warn('Save failed:',e); }
 }
 
 // ── TABS ─────────────────────────────────────────────────────────────────────
@@ -1660,21 +1720,137 @@ document.getElementById('modal-overlay').addEventListener('click',function(e){
 });
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-(async function(){
-  try{
-    var data=await apiLoad();
-    S.courses=data.courses||[];
-    S.rounds=data.rounds||[];
-    S.bag=data.bag&&data.bag.length?data.bag:[
-      {id:'b1',club:'Driver',distance:228,notes:''},{id:'b2',club:'3 Wood',distance:201,notes:''},
-      {id:'b3',club:'5 Hybrid',distance:178,notes:''},{id:'b4',club:'5 Iron',distance:169,notes:''},
-      {id:'b5',club:'6 Iron',distance:160,notes:''},{id:'b6',club:'7 Iron',distance:151,notes:''},
-      {id:'b7',club:'8 Iron',distance:137,notes:''},{id:'b8',club:'9 Iron',distance:123,notes:''},
-      {id:'b9',club:'Pitching Wedge',distance:110,notes:''},{id:'b10',club:'Gap Wedge',distance:96,notes:''},
-      {id:'b11',club:'Sand Wedge',distance:82,notes:''},{id:'b12',club:'Putter',distance:0,notes:'35"'}
-    ];
-  }catch(e){console.error('Load error:',e);}
+// ── SUPABASE SETUP ────────────────────────────────────────────────────────────
+var SUPA = supabase.createClient('https://bbvhycrocvbicneberyi.supabase.co', 'sb_publishable_LfuI5DtuBOnlglWBup673Q_UTBt4pau');
+var SUPA_USER = null;
+
+var DEFAULT_BAG_DATA = [
+  {id:'b1',club:'Driver',distance:228,notes:''},{id:'b2',club:'3 Wood',distance:201,notes:''},
+  {id:'b3',club:'5 Hybrid',distance:178,notes:''},{id:'b4',club:'5 Iron',distance:169,notes:''},
+  {id:'b5',club:'6 Iron',distance:160,notes:''},{id:'b6',club:'7 Iron',distance:151,notes:''},
+  {id:'b7',club:'8 Iron',distance:137,notes:''},{id:'b8',club:'9 Iron',distance:123,notes:''},
+  {id:'b9',club:'Pitching Wedge',distance:110,notes:''},{id:'b10',club:'Gap Wedge',distance:96,notes:''},
+  {id:'b11',club:'Sand Wedge',distance:82,notes:''},{id:'b12',club:'Putter',distance:0,notes:'35"'}
+];
+
+async function loadUserData(){
+  var data=await apiLoad();
+  S.courses=data.courses||[];
+  S.rounds=data.rounds||[];
+  S.bag=data.bag&&data.bag.length?data.bag:DEFAULT_BAG_DATA;
+}
+
+function showApp(user){
+  SUPA_USER=user;
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('main-app').style.display='';
+  document.getElementById('user-bar').style.display='flex';
+  document.getElementById('user-email-label').textContent=user.email;
+}
+
+function showAuth(){
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('user-bar').style.display='none';
+}
+
+function showLogin(){ document.getElementById('auth-login').style.display=''; document.getElementById('auth-signup').style.display='none'; clearAuthErr(); }
+function showSignup(){ document.getElementById('auth-login').style.display='none'; document.getElementById('auth-signup').style.display=''; clearAuthErr(); }
+function clearAuthErr(){ var e=document.getElementById('auth-err'); e.style.display='none'; e.textContent=''; }
+function showAuthErr(msg){ var e=document.getElementById('auth-err'); e.style.display='block'; e.textContent=msg; }
+
+async function doLogin(){
+  var email=document.getElementById('login-email').value.trim();
+  var pw=document.getElementById('login-pw').value;
+  if(!email||!pw){ showAuthErr('Please enter your email and password.'); return; }
+  var btn=document.querySelector('#auth-login .btn-gold');
+  btn.textContent='Signing in...'; btn.disabled=true;
+  var res=await SUPA.auth.signInWithPassword({email:email,password:pw});
+  btn.textContent='Sign In'; btn.disabled=false;
+  if(res.error){ showAuthErr(res.error.message); return; }
+  await loadUserData();
+  checkLocalMigration();
+  showApp(res.data.user);
   render();
+}
+
+async function doSignup(){
+  var email=document.getElementById('signup-email').value.trim();
+  var pw=document.getElementById('signup-pw').value;
+  var pw2=document.getElementById('signup-pw2').value;
+  if(!email||!pw){ showAuthErr('Please fill in all fields.'); return; }
+  if(pw!==pw2){ showAuthErr('Passwords do not match.'); return; }
+  if(pw.length<6){ showAuthErr('Password must be at least 6 characters.'); return; }
+  var btn=document.querySelector('#auth-signup .btn-gold');
+  btn.textContent='Creating account...'; btn.disabled=true;
+  var res=await SUPA.auth.signUp({email:email,password:pw});
+  btn.textContent='Create Account'; btn.disabled=false;
+  if(res.error){ showAuthErr(res.error.message); return; }
+  // Auto sign in after signup
+  await loadUserData();
+  checkLocalMigration();
+  showApp(res.data.user);
+  render();
+}
+
+async function doSignout(){
+  await SUPA.auth.signOut();
+  SUPA_USER=null;
+  S.courses=[]; S.rounds=[]; S.bag=DEFAULT_BAG_DATA;
+  showAuth();
+}
+
+function checkLocalMigration(){
+  var raw=localStorage.getItem('golf_19th_hole');
+  if(!raw) return;
+  try {
+    var local=JSON.parse(raw);
+    if((!local.courses||!local.courses.length)&&(!local.rounds||!local.rounds.length)) return;
+    // Only prompt if cloud is empty
+    if(S.courses.length||S.rounds.length) return;
+    var banner=document.createElement('div');
+    banner.className='migr-banner fade';
+    banner.innerHTML='<div style="font-family:Cormorant Garamond,serif;font-size:1.1rem;color:#c9a84c;margin-bottom:8px">Local data found</div>'
+      +'<div style="font-size:.78rem;color:#9abfaa;margin-bottom:14px">We found '+local.rounds.length+' rounds and '+local.courses.length+' courses saved in this browser. Import them to your account?</div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-gold" onclick="migrateLocalData(this)">Import to my account</button>'
+      +'<button class="btn btn-ghost" onclick="this.parentElement.parentElement.remove()">Skip</button>'
+      +'</div>';
+    document.getElementById('main').prepend(banner);
+  } catch(e){}
+}
+
+async function migrateLocalData(btn){
+  var raw=localStorage.getItem('golf_19th_hole'); if(!raw)return;
+  var local=JSON.parse(raw);
+  S.courses=local.courses||[];
+  S.rounds=local.rounds||[];
+  S.bag=local.bag&&local.bag.length?local.bag:DEFAULT_BAG_DATA;
+  await apiSave();
+  localStorage.removeItem('golf_19th_hole');
+  btn.closest('.migr-banner').remove();
+  render();
+  var note=document.createElement('div');
+  note.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#193326;border:1px solid rgba(201,168,76,.4);color:#c9a84c;padding:12px 24px;border-radius:10px;font-size:.84rem;z-index:999;font-family:DM Sans,sans-serif;white-space:nowrap';
+  note.textContent='Data imported successfully to your account!';
+  document.body.appendChild(note);
+  setTimeout(function(){document.body.removeChild(note);},3500);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async function(){
+  var sess=await SUPA.auth.getSession();
+  if(sess.data&&sess.data.session&&sess.data.session.user){
+    await loadUserData();
+    showApp(sess.data.session.user);
+    render();
+  } else {
+    showAuth();
+  }
+  // Keep session fresh
+  SUPA.auth.onAuthStateChange(async function(event,session){
+    if(event==='SIGNED_OUT'){ showAuth(); }
+  });
 })();
 </script>
 </body>
