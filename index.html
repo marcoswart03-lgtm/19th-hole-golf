@@ -1847,9 +1847,20 @@ async function migrateLocalData(btn){
   } else {
     showAuth();
   }
-  // Keep session fresh
+  // Handle auth state changes
   SUPA.auth.onAuthStateChange(async function(event,session){
-    if(event==='SIGNED_OUT'){ showAuth(); }
+    if(event==='SIGNED_OUT'){
+      SUPA_USER=null;
+      S.courses=[]; S.rounds=[]; S.bag=DEFAULT_BAG_DATA;
+      showAuth();
+    } else if(event==='SIGNED_IN'&&session&&session.user){
+      SUPA_USER=session.user;
+      await loadUserData();
+      showApp(session.user);
+      render();
+    } else if(event==='TOKEN_REFRESHED'&&session&&session.user){
+      SUPA_USER=session.user;
+    }
   });
 })();
 </script>
