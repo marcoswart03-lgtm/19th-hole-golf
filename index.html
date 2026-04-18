@@ -1865,35 +1865,30 @@ async function migrateLocalData(btn){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 (async function(){
-  // Let onAuthStateChange handle everything — it fires on page load too
-  var initialLoad=true;
-  SUPA.auth.onAuthStateChange(async function(event,session){
-    if(event==='SIGNED_OUT'||(!session)){
-      SUPA_USER=null;
-      S.courses=[]; S.rounds=[]; S.bag=DEFAULT_BAG_DATA;
-      showAuth();
-      initialLoad=false;
-      return;
-    }
-    if((event==='SIGNED_IN'||event==='INITIAL_SESSION')&&session&&session.user){
-      SUPA_USER=session.user;
+  try {
+    var sess = await SUPA.auth.getSession();
+    if(sess.data && sess.data.session && sess.data.session.user){
+      SUPA_USER = sess.data.session.user;
       await loadUserData();
-      showApp(session.user);
-      checkLocalMigration();
+      showApp(SUPA_USER);
       render();
-      initialLoad=false;
-      return;
+    } else {
+      showAuth();
     }
-    if(event==='TOKEN_REFRESHED'&&session&&session.user){
-      SUPA_USER=session.user;
+  } catch(e) {
+    console.error('Init error:', e);
+    showAuth();
+  }
+
+  // Handle sign out only
+  SUPA.auth.onAuthStateChange(function(event, session){
+    if(event === 'SIGNED_OUT'){
+      SUPA_USER = null;
+      S.courses=[]; S.rounds=[]; S.bag=DEFAULT_BAG_DATA;
+      sessionStorage.removeItem('golf_cache');
+      showAuth();
     }
   });
-  // Show auth if session check returns no user
-  var sess=await SUPA.auth.getSession();
-  if(initialLoad&&(!sess.data||!sess.data.session)){
-    showAuth();
-    initialLoad=false;
-  }
 })();
 </script>
 </body>
