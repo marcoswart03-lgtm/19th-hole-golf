@@ -285,15 +285,12 @@ var CF=null, RF=null;
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function apiLoad(){
-  try {
-    var raw = localStorage.getItem('golf_19th_hole');
-    return raw ? JSON.parse(raw) : {};
-  } catch(e) { return {}; }
+  try { var raw=localStorage.getItem('golf_19th_hole'); return raw?JSON.parse(raw):{}; }
+  catch(e){ return {}; }
 }
 async function apiSave(){
-  try {
-    localStorage.setItem('golf_19th_hole', JSON.stringify({courses:S.courses,rounds:S.rounds,bag:S.bag}));
-  } catch(e) { console.warn('Save failed:', e); }
+  try { localStorage.setItem('golf_19th_hole',JSON.stringify({courses:S.courses,rounds:S.rounds,bag:S.bag})); }
+  catch(e){ console.warn('Save failed:',e); }
 }
 
 // ── TABS ─────────────────────────────────────────────────────────────────────
@@ -1000,6 +997,16 @@ function buildBag(){
     html+='<button class="btn btn-gold" onclick="addNewClub()">✓ Save</button>';
     html+='<button class="btn btn-ghost" onclick="S.showNewClub=false;render()">Cancel</button></div></div>';
   }
+  // ── Import / Export ──────────────────────────────────────────────────────
+  html+='<div class="sec-t" style="margin-bottom:13px;margin-top:24px">Data</div>';
+  html+='<div class="card card-gold">';
+  html+='<div style="font-size:.68rem;color:#5a8068;margin-bottom:14px;line-height:1.6">Export your data as a JSON file to back it up or move it to another device. Import a previously exported file to restore your data.</div>';
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
+  html+='<button class="btn btn-gold" onclick="exportData()">⬇ Export Data</button>';
+  html+='<button class="btn" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#ede8dc" onclick="document.getElementById(\'import-input\').click()">⬆ Import Data</button>';
+  html+='</div>';
+  html+='<input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(this)">';
+  html+='</div>';
   return html;
 }
 
@@ -1224,6 +1231,49 @@ function saveRound(){
   apiSave(); closeModal(); render();
 }
 function deleteRound(id){ S.rounds=S.rounds.filter(function(r){return r.id!==id;}); S.confirmDeleteRound=null; apiSave(); render(); }
+
+// ── DATA IMPORT / EXPORT ─────────────────────────────────────────────────────
+function exportData(){
+  var data={courses:S.courses,rounds:S.rounds,bag:S.bag};
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='golf_data_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importData(input){
+  var file=input.files[0]; if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      if(!data.courses||!data.rounds||!data.bag){
+        alert('Invalid file — make sure you are importing a golf tracker export.');
+        return;
+      }
+      S.courses=data.courses;
+      S.rounds=data.rounds;
+      S.bag=data.bag;
+      apiSave();
+      render();
+      // Show confirmation
+      var note=document.createElement('div');
+      note.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#193326;border:1px solid rgba(201,168,76,0.4);color:#c9a84c;padding:12px 24px;border-radius:10px;font-size:.84rem;z-index:999;font-family:DM Sans,sans-serif';
+      note.textContent='Data imported successfully — '+data.rounds.length+' rounds, '+data.courses.length+' courses loaded.';
+      document.body.appendChild(note);
+      setTimeout(function(){document.body.removeChild(note);},3500);
+    } catch(err){
+      alert('Could not read file. Make sure it is a valid JSON export.');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
+}
 
 // ── EDIT ROUND MODAL ─────────────────────────────────────────────────────────
 function openEditRound(id){
