@@ -1785,8 +1785,13 @@ async function doLogin(){
   try {
     var res=await SUPA.auth.signInWithPassword({email:email,password:pw});
     if(res.error){ showAuthErr(res.error.message); btn.textContent='Sign In'; btn.disabled=false; return; }
-    // onAuthStateChange will fire SIGNED_IN and handle everything
-    // just leave the button as-is — the screen will switch automatically
+    if(res.data&&res.data.user){
+      SUPA_USER=res.data.user;
+      await loadUserData();
+      checkLocalMigration();
+      showApp(res.data.user);
+      render();
+    }
   } catch(e){
     showAuthErr('Connection error. Check your internet and try again.');
     btn.textContent='Sign In'; btn.disabled=false;
